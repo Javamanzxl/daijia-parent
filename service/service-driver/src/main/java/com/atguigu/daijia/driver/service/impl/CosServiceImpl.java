@@ -67,7 +67,6 @@ public class CosServiceImpl implements CosService {
         //图片临时访问url，回显使用
         cosUploadVo.setShowUrl(this.getImageUrl(uploadPath));
         return cosUploadVo;
-
     }
 
     /**

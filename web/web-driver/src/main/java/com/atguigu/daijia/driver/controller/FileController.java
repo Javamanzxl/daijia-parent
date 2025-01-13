@@ -14,16 +14,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 @Tag(name = "上传管理接口")
 @RestController
-@RequestMapping("file")
+@RequestMapping("/file")
 public class FileController {
-    @Resource
-    private CosService cosService;
 
-    @Operation(summary = "上传")
-    @UserLogin
-    @PostMapping("/upload")
-    public Result<CosUploadVo> upload(@RequestPart("file") MultipartFile file,
-                                      @RequestParam(name = "path", defaultValue = "auth") String path) {
-        return Result.ok(cosService.upload(file, path));
-    }
 }
