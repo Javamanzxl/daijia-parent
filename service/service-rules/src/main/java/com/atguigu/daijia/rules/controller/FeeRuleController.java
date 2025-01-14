@@ -9,7 +9,6 @@ import org.springframework.web.bind.annotation.RestController;
 @Slf4j
 @RestController
 @RequestMapping("/rules/fee")
-
 public class FeeRuleController {
 
 
