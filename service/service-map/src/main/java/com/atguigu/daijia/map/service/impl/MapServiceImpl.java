@@ -50,10 +50,10 @@ public class MapServiceImpl implements MapService {
             //获取返回路线信息
             JSONObject route = result.getJSONObject("result").getJSONArray("routes").getJSONObject(0);
             DrivingLineVo drivingLineVo = new DrivingLineVo();
-            drivingLineVo.setDistance(route.getBigDecimal("distance"));
-            drivingLineVo.setDuration(route.getBigDecimal("duration")
+            drivingLineVo.setDistance(route.getBigDecimal("distance")
                     .divide(new BigDecimal(1000))
                     .setScale(2, RoundingMode.HALF_UP));
+            drivingLineVo.setDuration(route.getBigDecimal("duration"));
             drivingLineVo.setPolyline(route.getJSONArray("polyline"));
             return drivingLineVo;
         }

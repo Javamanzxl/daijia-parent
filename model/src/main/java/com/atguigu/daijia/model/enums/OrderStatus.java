@@ -26,12 +26,4 @@ public enum OrderStatus {
         this.status = status;
         this.comment = comment;
     }
-
-    public String getComment() {
-        return comment;
-    }
-
-    public void setComment(String comment) {
-        this.comment = comment;
-    }
 }
