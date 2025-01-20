@@ -6,16 +6,10 @@ import com.atguigu.daijia.common.constant.SystemConstant;
 import com.atguigu.daijia.common.execption.GlobalException;
 import com.atguigu.daijia.common.result.ResultCodeEnum;
 import com.atguigu.daijia.driver.config.TencentCloudProperties;
-import com.atguigu.daijia.driver.mapper.DriverAccountMapper;
-import com.atguigu.daijia.driver.mapper.DriverInfoMapper;
-import com.atguigu.daijia.driver.mapper.DriverLoginLogMapper;
-import com.atguigu.daijia.driver.mapper.DriverSetMapper;
+import com.atguigu.daijia.driver.mapper.*;
 import com.atguigu.daijia.driver.service.CosService;
 import com.atguigu.daijia.driver.service.DriverInfoService;
-import com.atguigu.daijia.model.entity.driver.DriverAccount;
-import com.atguigu.daijia.model.entity.driver.DriverInfo;
-import com.atguigu.daijia.model.entity.driver.DriverLoginLog;
-import com.atguigu.daijia.model.entity.driver.DriverSet;
+import com.atguigu.daijia.model.entity.driver.*;
 import com.atguigu.daijia.model.form.driver.DriverFaceModelForm;
 import com.atguigu.daijia.model.form.driver.UpdateDriverAuthInfoForm;
 import com.atguigu.daijia.model.vo.driver.DriverAuthInfoVo;
@@ -28,17 +22,18 @@ import com.tencentcloudapi.common.exception.TencentCloudSDKException;
 import com.tencentcloudapi.common.profile.ClientProfile;
 import com.tencentcloudapi.common.profile.HttpProfile;
 import com.tencentcloudapi.iai.v20200303.IaiClient;
-import com.tencentcloudapi.iai.v20200303.models.CreatePersonRequest;
-import com.tencentcloudapi.iai.v20200303.models.CreatePersonResponse;
+import com.tencentcloudapi.iai.v20200303.models.*;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import me.chanjar.weixin.common.error.WxErrorException;
+import org.joda.time.DateTime;
 import org.springframework.beans.BeanUtils;
 import org.springframework.cloud.context.config.annotation.RefreshScope;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 import java.math.BigDecimal;
+import java.util.Date;
 
 @Slf4j
 @Service
@@ -58,6 +53,8 @@ public class DriverInfoServiceImpl extends ServiceImpl<DriverInfoMapper, DriverI
     private CosService cosService;
     @Resource
     private TencentCloudProperties tencentCloudProperties;
+    @Resource
+    private DriverFaceRecognitionMapper driverFaceRecognitionMapper;
 
     /**
      * 小程序授权登录
@@ -204,6 +201,7 @@ public class DriverInfoServiceImpl extends ServiceImpl<DriverInfoMapper, DriverI
 
     /**
      * 获取司机设置信息
+     *
      * @param driverId
      * @return
      */
@@ -211,5 +209,132 @@ public class DriverInfoServiceImpl extends ServiceImpl<DriverInfoMapper, DriverI
     public DriverSet getDriverSet(Long driverId) {
         return driverSetMapper.selectOne(new LambdaQueryWrapper<DriverSet>()
                 .eq(DriverSet::getDriverId, driverId));
+    }
+
+    /**
+     * 判断司机当日是否进行过人脸识别
+     *
+     * @param driverId
+     * @return
+     */
+    @Override
+    public Boolean isFaceRecognition(Long driverId) {
+        String currentTime = new DateTime().toString("yyyy-MM-dd");
+        DriverFaceRecognition driverFaceRecognition = driverFaceRecognitionMapper.selectOne(new LambdaQueryWrapper<DriverFaceRecognition>()
+                .eq(DriverFaceRecognition::getDriverId, driverId)
+                .eq(DriverFaceRecognition::getFaceDate, currentTime));
+        return driverFaceRecognition != null;
+    }
+
+    /**
+     * 人脸静态活体检测
+     * 文档地址：
+     * https://cloud.tencent.com/document/api/867/48501
+     * https://console.cloud.tencent.com/api/explorer?Product=iai&Version=2020-03-03&Action=DetectLiveFace
+     * 验证司机人脸
+     *
+     * @param driverFaceModelForm
+     * @return
+     */
+    @Override
+    public Boolean verifyDriverFace(DriverFaceModelForm driverFaceModelForm) {
+        //1.照片对比
+        try {
+            // 实例化一个认证对象，入参需要传入腾讯云账户 SecretId 和 SecretKey，此处还需注意密钥对的保密
+            // 代码泄露可能会导致 SecretId 和 SecretKey 泄露，并威胁账号下所有资源的安全性。以下代码示例仅供参考，建议采用更安全的方式来使用密钥，请参见：https://cloud.tencent.com/document/product/1278/85305
+            // 密钥可前往官网控制台 https://console.cloud.tencent.com/cam/capi 进行获取
+            Credential cred = new Credential(tencentCloudProperties.getSecretId(), tencentCloudProperties.getSecretKey());
+            // 实例化一个http选项，可选的，没有特殊需求可以跳过
+            HttpProfile httpProfile = new HttpProfile();
+            httpProfile.setEndpoint("iai.tencentcloudapi.com");
+            // 实例化一个client选项，可选的，没有特殊需求可以跳过
+            ClientProfile clientProfile = new ClientProfile();
+            clientProfile.setHttpProfile(httpProfile);
+            // 实例化要请求产品的client对象,clientProfile是可选的
+            IaiClient client = new IaiClient(cred, tencentCloudProperties.getRegion(), clientProfile);
+            // 实例化一个请求对象,每个接口都会对应一个request对象
+            VerifyFaceRequest req = new VerifyFaceRequest();
+            // 设置请求参数
+            req.setImage(driverFaceModelForm.getImageBase64());
+            req.setPersonId(driverFaceModelForm.getDriverId().toString());
+            // 返回的resp是一个VerifyFaceResponse的实例，与请求对象对应
+            VerifyFaceResponse resp = client.VerifyFace(req);
+            if(resp.getIsMatch()){
+                //2.如果照片比对成功，静态活体检测
+                Boolean isSuccess = this.detectLiveFace(driverFaceModelForm.getImageBase64());
+                if(isSuccess){
+                    //3.如果静态活体检测通过，添加数据到认证表里面
+                    DriverFaceRecognition driverFaceRecognition = new DriverFaceRecognition();
+                    driverFaceRecognition.setDriverId(driverFaceModelForm.getDriverId());
+                    driverFaceRecognition.setFaceDate(new Date());
+                    driverFaceRecognitionMapper.insert(driverFaceRecognition);
+                    return true;
+                }
+            }
+        } catch (TencentCloudSDKException e) {
+            System.out.println(e.toString());
+        }
+        throw new GlobalException(ResultCodeEnum.FACE_FAIL);
+    }
+
+    /**
+     * 人脸静态活体检测
+     * 文档地址：
+     * https://cloud.tencent.com/document/api/867/48501
+     * https://console.cloud.tencent.com/api/explorer?Product=iai&Version=2020-03-03&Action=DetectLiveFace
+     * 人脸静态活体检测
+     * @param imageBase64
+     * @return
+     */
+    private Boolean detectLiveFace(String imageBase64) {
+        try{
+            // 实例化一个认证对象，入参需要传入腾讯云账户 SecretId 和 SecretKey，此处还需注意密钥对的保密
+            // 代码泄露可能会导致 SecretId 和 SecretKey 泄露，并威胁账号下所有资源的安全性。以下代码示例仅供参考，建议采用更安全的方式来使用密钥，请参见：https://cloud.tencent.com/document/product/1278/85305
+            // 密钥可前往官网控制台 https://console.cloud.tencent.com/cam/capi 进行获取
+            Credential cred = new Credential(tencentCloudProperties.getSecretId(), tencentCloudProperties.getSecretKey());
+            // 实例化一个http选项，可选的，没有特殊需求可以跳过
+            HttpProfile httpProfile = new HttpProfile();
+            httpProfile.setEndpoint("iai.tencentcloudapi.com");
+            // 实例化一个client选项，可选的，没有特殊需求可以跳过
+            ClientProfile clientProfile = new ClientProfile();
+            clientProfile.setHttpProfile(httpProfile);
+            // 实例化要请求产品的client对象,clientProfile是可选的
+            IaiClient client = new IaiClient(cred, tencentCloudProperties.getRegion(), clientProfile);
+            // 实例化一个请求对象,每个接口都会对应一个request对象
+            DetectLiveFaceRequest req = new DetectLiveFaceRequest();
+            req.setImage(imageBase64);
+            // 返回的resp是一个DetectLiveFaceResponse的实例，与请求对象对应
+            DetectLiveFaceResponse resp = client.DetectLiveFace(req);
+            // 输出json格式的字符串回包
+            System.out.println(DetectLiveFaceResponse.toJsonString(resp));
+            if(resp.getIsLiveness()) {
+                return true;
+            }
+        } catch (TencentCloudSDKException e) {
+            System.out.println(e.toString());
+        }
+        return false;
+    }
+
+    /**
+     * 更新接单状态
+     * @param driverId
+     * @param status
+     * @return
+     */
+    @Override
+    public Boolean updateServiceStatus(Long driverId, Integer status) {
+        DriverFaceRecognition driverFaceRecognition = driverFaceRecognitionMapper.selectOne(new LambdaQueryWrapper<DriverFaceRecognition>()
+                .eq(DriverFaceRecognition::getDriverId, driverId)
+                .eq(DriverFaceRecognition::getFaceDate,new DateTime().toString("yyyy-MM-dd")));
+        if(driverFaceRecognition==null){
+            return false;
+        }else{
+            DriverSet driverSet = new DriverSet();
+            driverSet.setServiceStatus(status);
+            driverSetMapper.update(driverSet,new LambdaQueryWrapper<DriverSet>()
+                    .eq(DriverSet::getDriverId,driverId));
+            return true;
+        }
     }
 }

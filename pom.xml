@@ -35,8 +35,7 @@
         <vod_api.version>2.1.4</vod_api.version>
         <minio.version>8.5.2</minio.version>
         <jodatime.version>2.10.1</jodatime.version>
-        <xxl-job.version>2.4.0</xxl-job.version>
-
+        <xxl-job.version>2.4.1</xxl-job.version>
         <wxpay.version>0.2.11</wxpay.version>
         <weixin.miniapp.version>4.5.5.B</weixin.miniapp.version>
         <tencentcloud.version>3.1.322</tencentcloud.version>

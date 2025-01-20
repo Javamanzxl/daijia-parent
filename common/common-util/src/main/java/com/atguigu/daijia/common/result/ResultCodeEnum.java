@@ -32,6 +32,7 @@ public enum ResultCodeEnum {
     LOGIN_MOBILE_ERROR( 216, "账号不正确"),
     ACCOUNT_STOP( 216, "账号已停用"),
     NODE_ERROR( 217, "该节点下有子节点，不可以删除"),
+    XXL_JOB_ERROR(217,"XXL_JOB调用异常"),
 
     COB_NEW_ORDER_FAIL( 217, "抢单失败"),
     MAP_FAIL( 217, "地图服务调用失败"),
@@ -46,7 +47,8 @@ public enum ResultCodeEnum {
     COUPON_EXPIRE( 250, "优惠券已过期"),
     COUPON_LESS( 250, "优惠券库存不足"),
     COUPON_USER_LIMIT( 250, "超出领取数量"),
-    WX_CODE_ERROR(217, "获取微信openid失败");
+    WX_CODE_ERROR(217, "获取微信openid失败"),
+    FACE_FAIL(217, "司机人脸验证失败");
 
     private Integer code;
 

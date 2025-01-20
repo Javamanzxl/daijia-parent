@@ -26,7 +26,7 @@ import java.util.List;
 @Service
 public class LocationServiceImpl implements LocationService {
     @Resource
-    private RedisTemplate<String, String> redisTemplate;
+    private RedisTemplate<String, Object> redisTemplate;
     @Resource
     private DriverInfoFeignClient driverInfoFeignClient;
 
@@ -78,15 +78,15 @@ public class LocationServiceImpl implements LocationService {
                 .includeDistance()  //包含距离
                 .includeCoordinates()   //包含坐标
                 .sortAscending();   //升序排列
-        GeoResults<RedisGeoCommands.GeoLocation<String>> geoResults = redisTemplate.opsForGeo().radius(RedisConstant.DRIVER_GEO_LOCATION, circle, args);
+        GeoResults<RedisGeoCommands.GeoLocation<Object>> geoResults = redisTemplate.opsForGeo().radius(RedisConstant.DRIVER_GEO_LOCATION, circle, args);
         //2.查询redis最终返回list
         if(geoResults!=null){
-            List<GeoResult<RedisGeoCommands.GeoLocation<String>>> content = geoResults.getContent();
+            List<GeoResult<RedisGeoCommands.GeoLocation<Object>>> content = geoResults.getContent();
             List<NearByDriverVo> nearByDrivers = new ArrayList<>();
             //3.对list集合进行处理
             //遍历list集合，得到每个司机信息,根据每个司机的个性化信息判断
-            for (GeoResult<RedisGeoCommands.GeoLocation<String>> item : content) {
-                Long driverId = Long.parseLong(item.getContent().getName());
+            for (GeoResult<RedisGeoCommands.GeoLocation<Object>> item : content) {
+                Long driverId = Long.parseLong(item.getContent().getName().toString());
                 //当前距离
                 BigDecimal currentDistance = BigDecimal.valueOf(item.getDistance().getValue()).setScale(2, RoundingMode.HALF_UP);
                 //获取司机接单设置参数

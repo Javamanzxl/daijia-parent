@@ -37,7 +37,7 @@ public class LocationController {
             throw new GlobalException(ResultCodeEnum.FEIGN_FAIL);
         }
         DriverSet driverSet = result.getData();
-        if(driverSet.getIsAutoAccept()==1){
+        if(driverSet.getServiceStatus()==1){
             return Result.ok(locationService.updateDriverLocation(updateDriverLocationForm));
         }else{
             throw new GlobalException(ResultCodeEnum.NO_START_SERVICE);
