@@ -17,7 +17,6 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/rules/fee")
 public class FeeRuleController {
-
     @Resource
     private FeeRuleService feeRuleService;
     @Operation(summary = "计算订单费用")

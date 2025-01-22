@@ -8,6 +8,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 
 @FeignClient(value = "service-driver")
 public interface CiFeignClient {
-
-
+    @PostMapping("/ci/textAuditing")
+    Result<TextAuditingVo> textAuditing(@RequestBody String content);
 }

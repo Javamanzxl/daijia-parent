@@ -6,6 +6,7 @@ import com.atguigu.daijia.model.entity.driver.DriverSet;
 import com.atguigu.daijia.model.form.driver.DriverFaceModelForm;
 import com.atguigu.daijia.model.form.driver.UpdateDriverAuthInfoForm;
 import com.atguigu.daijia.model.vo.driver.DriverAuthInfoVo;
+import com.atguigu.daijia.model.vo.driver.DriverInfoVo;
 import com.atguigu.daijia.model.vo.driver.DriverLoginVo;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -73,5 +74,10 @@ public class DriverInfoController {
         return Result.ok(driverInfoService.updateServiceStatus(driverId, status));
     }
 
+    @Operation(summary = "获取司机基本信息")
+    @GetMapping("/getDriverInfo/{driverId}")
+    public Result<DriverInfoVo> getDriverInfo(@PathVariable Long driverId) {
+        return Result.ok(driverInfoService.getDriverInfo(driverId));
+    }
 }
 

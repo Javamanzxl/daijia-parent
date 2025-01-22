@@ -1,6 +1,9 @@
 package com.atguigu.daijia.driver.service.impl;
 
+import com.atguigu.daijia.common.execption.GlobalException;
+import com.atguigu.daijia.common.result.ResultCodeEnum;
 import com.atguigu.daijia.driver.config.TencentCloudProperties;
+import com.atguigu.daijia.driver.service.CiService;
 import com.atguigu.daijia.driver.service.CosService;
 import com.atguigu.daijia.model.vo.driver.CosUploadVo;
 import com.qcloud.cos.COSClient;
@@ -30,7 +33,8 @@ import java.util.UUID;
 public class CosServiceImpl implements CosService {
     @Resource
     private TencentCloudProperties tencentCloudProperties;
-
+    @Resource
+    private CiService ciService;
     /**
      * 文件上传
      *
@@ -61,12 +65,19 @@ public class CosServiceImpl implements CosService {
         putObjectRequest.setStorageClass(StorageClass.Standard);
         PutObjectResult putObjectResult = cosClient.putObject(putObjectRequest); //上传文件
         cosClient.shutdown();
-        //封装返回对象
-        CosUploadVo cosUploadVo = new CosUploadVo();
-        cosUploadVo.setUrl(uploadPath);
-        //图片临时访问url，回显使用
-        cosUploadVo.setShowUrl(this.getImageUrl(uploadPath));
-        return cosUploadVo;
+        //图片审核
+        if(ciService.imageAuditing(uploadPath)){
+            //封装返回对象
+            CosUploadVo cosUploadVo = new CosUploadVo();
+            cosUploadVo.setUrl(uploadPath);
+            //图片临时访问url，回显使用
+            cosUploadVo.setShowUrl(this.getImageUrl(uploadPath));
+            return cosUploadVo;
+        }else{
+            //删除违规图片
+            cosClient.deleteObject(tencentCloudProperties.getBucketPrivate(),uploadPath);
+            throw new GlobalException(ResultCodeEnum.IMAGE_AUDITION_FAIL);
+        }
     }
 
     /**

@@ -16,5 +16,11 @@ import org.springframework.web.multipart.MultipartFile;
 @RestController
 @RequestMapping("/file")
 public class FileController {
-
+    @Resource
+    private FileService fileService;
+    @Operation(summary = "Minio文件上传")
+    @PostMapping("upload")
+    public Result<String> upload(@RequestPart("file") MultipartFile file) {
+        return Result.ok(fileService.upload(file));
+    }
 }

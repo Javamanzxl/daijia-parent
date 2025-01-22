@@ -24,9 +24,11 @@ public class CosController {
     @Operation(summary = "上传")
     @UserLogin
     @PostMapping("/upload")
-    public Result<CosUploadVo> upload(@RequestPart("file") MultipartFile file,
+    public Result<String> upload(@RequestPart("file") MultipartFile file,
                                       @RequestParam(name = "path", defaultValue = "auth") String path) {
-        return Result.ok(cosService.upload(file, path));
+        CosUploadVo cosUploadVo = cosService.upload(file, path);
+        String showUrl = cosUploadVo.getShowUrl();
+        return Result.ok(showUrl);
     }
 }
 

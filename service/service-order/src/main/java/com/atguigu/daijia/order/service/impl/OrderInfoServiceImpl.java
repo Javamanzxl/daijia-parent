@@ -3,16 +3,22 @@ package com.atguigu.daijia.order.service.impl;
 import com.atguigu.daijia.common.constant.RedisConstant;
 import com.atguigu.daijia.common.execption.GlobalException;
 import com.atguigu.daijia.common.result.ResultCodeEnum;
-import com.atguigu.daijia.model.entity.order.OrderInfo;
-import com.atguigu.daijia.model.entity.order.OrderStatusLog;
+import com.atguigu.daijia.model.entity.order.*;
 import com.atguigu.daijia.model.enums.OrderStatus;
 import com.atguigu.daijia.model.form.order.OrderInfoForm;
+import com.atguigu.daijia.model.form.order.StartDriveForm;
+import com.atguigu.daijia.model.form.order.UpdateOrderBillForm;
+import com.atguigu.daijia.model.form.order.UpdateOrderCartForm;
+import com.atguigu.daijia.model.vo.base.PageVo;
 import com.atguigu.daijia.model.vo.order.CurrentOrderInfoVo;
 import com.atguigu.daijia.model.vo.order.OrderInfoVo;
-import com.atguigu.daijia.order.mapper.OrderInfoMapper;
-import com.atguigu.daijia.order.mapper.OrderStatusLogMapper;
+import com.atguigu.daijia.model.vo.order.OrderListVo;
+import com.atguigu.daijia.order.mapper.*;
 import com.atguigu.daijia.order.service.OrderInfoService;
+import com.atguigu.daijia.order.service.OrderMonitorService;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import jakarta.annotation.Resource;
 import org.redisson.api.RLock;
@@ -38,6 +44,13 @@ public class OrderInfoServiceImpl extends ServiceImpl<OrderInfoMapper, OrderInfo
     private RedisTemplate<String,Object> redisTemplate;
     @Resource
     private RedissonClient redissonClient;
+    @Resource
+    private OrderMonitorService orderMonitorService;
+    @Resource
+    private OrderBillMapper orderBillMapper;
+
+    @Resource
+    private OrderProfitsharingMapper orderProfitsharingMapper;
 
     /**
      * 保存订单信息
@@ -204,4 +217,165 @@ public class OrderInfoServiceImpl extends ServiceImpl<OrderInfoMapper, OrderInfo
         }
         return currentOrderInfoVo;
     }
+
+    /**
+     * 司机到达起始点
+     * @param orderId
+     * @param driverId
+     * @return
+     */
+    @Override
+    public Boolean driverArriveStartLocation(Long orderId, Long driverId) {
+        OrderInfo orderInfo = orderInfoMapper.selectOne(new LambdaQueryWrapper<OrderInfo>()
+                .eq(OrderInfo::getId, orderId)
+                .eq(OrderInfo::getDriverId, driverId));
+        if(orderInfo==null){
+            throw new GlobalException(ResultCodeEnum.DATA_ERROR);
+        }
+        orderInfo.setStatus(OrderStatus.DRIVER_ARRIVED.getStatus());
+        orderInfo.setArriveTime(new Date());
+        int result = orderInfoMapper.updateById(orderInfo);
+        if(result==1){
+            this.log(orderId, OrderStatus.DRIVER_ARRIVED.getStatus());
+        }else{
+            throw new GlobalException(ResultCodeEnum.UPDATE_ERROR);
+        }
+        return true;
+    }
+
+    /**
+     * 更新代驾车辆信息
+     * @param updateOrderCartForm
+     * @return
+     */
+    @Override
+    public Boolean updateOrderCart(UpdateOrderCartForm updateOrderCartForm) {
+        LambdaQueryWrapper<OrderInfo> queryWrapper = new LambdaQueryWrapper<>();
+        queryWrapper.eq(OrderInfo::getId, updateOrderCartForm.getOrderId());
+        queryWrapper.eq(OrderInfo::getDriverId, updateOrderCartForm.getDriverId());
+        OrderInfo updateOrderInfo = new OrderInfo();
+        BeanUtils.copyProperties(updateOrderCartForm, updateOrderInfo);
+        updateOrderInfo.setStatus(OrderStatus.UPDATE_CART_INFO.getStatus());
+        //只能更新自己的订单
+        int row = orderInfoMapper.update(updateOrderInfo, queryWrapper);
+        if(row == 1) {
+            //记录日志
+            this.log(updateOrderCartForm.getOrderId(), OrderStatus.UPDATE_CART_INFO.getStatus());
+        } else {
+            throw new GlobalException(ResultCodeEnum.UPDATE_ERROR);
+        }
+        return true;
+    }
+
+    /**
+     * 开始代驾服务
+     * @param startDriveForm
+     * @return
+     */
+    @Override
+    public Boolean startDrive(StartDriveForm startDriveForm) {
+        OrderInfo orderInfo = orderInfoMapper.selectOne(new LambdaQueryWrapper<OrderInfo>()
+                .eq(OrderInfo::getDriverId, startDriveForm.getDriverId())
+                .eq(OrderInfo::getId, startDriveForm.getOrderId()));
+        if(orderInfo!=null){
+            orderInfo.setStatus(OrderStatus.START_SERVICE.getStatus());
+            orderInfo.setStartServiceTime(new Date());
+            int result = orderInfoMapper.updateById(orderInfo);
+            if(result==1){
+                //记录日志
+                this.log(startDriveForm.getOrderId(), OrderStatus.START_SERVICE.getStatus());
+            } else {
+                throw new GlobalException(ResultCodeEnum.UPDATE_ERROR);
+            }
+            //初始化订单监控统计数据
+            OrderMonitor orderMonitor = new OrderMonitor();
+            orderMonitor.setOrderId(startDriveForm.getOrderId());
+            orderMonitorService.saveOrderMonitor(orderMonitor);
+        }
+        return null;
+    }
+
+    /**
+     * 根据时间段获取订单数
+     * @param startTime
+     * @param endTime
+     * @return
+     */
+    @Override
+    public Long getOrderNumByTime(String startTime, String endTime) {
+        return orderInfoMapper.selectCount(new LambdaQueryWrapper<OrderInfo>()
+                .ge(OrderInfo::getStartServiceTime, startTime)
+                .lt(OrderInfo::getEndServiceTime, endTime));
+    }
+
+    /**
+     * 结束代驾服务更新订单账单
+     * @param updateOrderBillForm
+     * @return
+     */
+    @Override
+    public Boolean endDrive(UpdateOrderBillForm updateOrderBillForm) {
+        //1.更新订单信息
+        Long driverId = updateOrderBillForm.getDriverId();
+        Long orderId = updateOrderBillForm.getOrderId();
+        OrderInfo orderInfo = orderInfoMapper.selectOne(new LambdaQueryWrapper<OrderInfo>()
+                .eq(OrderInfo::getDriverId, driverId)
+                .eq(OrderInfo::getId, orderId));
+        if(orderInfo == null){
+            return false;
+        }
+        orderInfo.setStatus(OrderStatus.END_SERVICE.getStatus());
+        orderInfo.setRealAmount(updateOrderBillForm.getTotalAmount());
+        orderInfo.setFavourFee(updateOrderBillForm.getFavourFee());
+        orderInfo.setRealDistance(updateOrderBillForm.getRealDistance());
+        orderInfo.setEndServiceTime(new Date());
+        int row = orderInfoMapper.updateById(orderInfo);
+        if(row == 1) {
+            //记录日志
+            this.log(updateOrderBillForm.getOrderId(), OrderStatus.END_SERVICE.getStatus());
+
+            //插入实际账单数据
+            OrderBill orderBill = new OrderBill();
+            BeanUtils.copyProperties(updateOrderBillForm, orderBill);
+            orderBill.setOrderId(updateOrderBillForm.getOrderId());
+            orderBill.setPayAmount(orderBill.getTotalAmount());
+            orderBillMapper.insert(orderBill);
+
+            //插入分账信息数据
+            OrderProfitsharing orderProfitsharing = new OrderProfitsharing();
+            BeanUtils.copyProperties(updateOrderBillForm, orderProfitsharing);
+            orderProfitsharing.setOrderId(updateOrderBillForm.getOrderId());
+            orderProfitsharing.setRuleId(updateOrderBillForm.getProfitsharingRuleId());
+            orderProfitsharing.setStatus(1);
+            orderProfitsharingMapper.insert(orderProfitsharing);
+        } else {
+            throw new GlobalException(ResultCodeEnum.UPDATE_ERROR);
+        }
+        return true;
+    }
+
+    /**
+     * 获取乘客订单分页列表
+     * @param pageParam
+     * @param customerId
+     * @return
+     */
+    @Override
+    public PageVo findCustomerOrderPage(Page<OrderInfo> pageParam, Long customerId) {
+        IPage<OrderListVo> pageInfo = orderInfoMapper.selectCustomerOrderPage(pageParam, customerId);
+        return new PageVo<>(pageInfo.getRecords(), pageInfo.getPages(), pageInfo.getTotal());
+    }
+
+    /**
+     * 获取司机订单分页列表
+     * @param pageParam
+     * @param driverId
+     * @return
+     */
+    @Override
+    public PageVo findDriverOrderPage(Page<OrderInfo> pageParam, Long driverId) {
+        IPage<OrderListVo> pageInfo = orderInfoMapper.selectDriverOrderPage(pageParam, driverId);
+        return new PageVo(pageInfo.getRecords(), pageInfo.getPages(), pageInfo.getTotal());
+    }
+
 }
