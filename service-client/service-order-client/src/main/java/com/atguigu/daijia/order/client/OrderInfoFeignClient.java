@@ -8,13 +8,15 @@ import com.atguigu.daijia.model.form.order.UpdateOrderBillForm;
 import com.atguigu.daijia.model.form.order.UpdateOrderCartForm;
 import com.atguigu.daijia.model.form.rules.ProfitsharingRuleRequestForm;
 import com.atguigu.daijia.model.vo.base.PageVo;
-import com.atguigu.daijia.model.vo.order.CurrentOrderInfoVo;
+import com.atguigu.daijia.model.vo.order.*;
 import com.atguigu.daijia.model.vo.rules.ProfitsharingRuleResponseVo;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+
+import java.math.BigDecimal;
 
 
 @FeignClient(value = "service-order")
@@ -49,4 +51,18 @@ public interface OrderInfoFeignClient {
     Result<PageVo> findDriverOrderPage(@PathVariable("driverId") Long driverId,
                                        @PathVariable("page") Long page,
                                        @PathVariable("limit") Long limit);
+    @GetMapping("/order/info/getOrderBillInfo/{orderId}")
+    Result<OrderBillVo> getOrderBillInfo(@PathVariable("orderId") Long orderId);
+    @GetMapping("/order/info/getOrderProfitsharing/{orderId}")
+    Result<OrderProfitsharingVo> getOrderProfitsharing(@PathVariable("orderId") Long orderId);
+    @GetMapping("/order/info/sendOrderBillInfo/{orderId}/{driverId}")
+    Result<Boolean> sendOrderBillInfo(@PathVariable("orderId") Long orderId, @PathVariable("driverId") Long driverId);
+    @GetMapping("/order/info/getOrderPayVo/{orderNo}/{customerId}")
+    Result<OrderPayVo> getOrderPayVo(@PathVariable("orderNo") String orderNo, @PathVariable("customerId") Long customerId);
+    @GetMapping("/order/info//updateOrderPayStatus/{orderNo}")
+    Result<Boolean> updateOrderPayStatus(@PathVariable("orderNo") String orderNo);
+    @GetMapping("/order/info//getOrderRewardFee/{orderNo}")
+    Result<OrderRewardVo> getOrderRewardFee(@PathVariable("orderNo") String orderNo);
+    @GetMapping("/order/info/updateCouponAmount/{orderId}/{couponAmount}")
+    Result<Boolean> updateCouponAmount(@PathVariable Long orderId, @PathVariable BigDecimal couponAmount);
 }

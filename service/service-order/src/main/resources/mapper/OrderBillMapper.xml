@@ -5,5 +5,11 @@
 <mapper namespace="com.atguigu.daijia.order.mapper.OrderBillMapper">
 
 
+    <update id="updateCouponAmount">
+        update daijia_order.order_bill
+        set coupon_amount = #{couponAmount},
+            pay_amount = pay_amount - #{couponAmount}
+        where order_id = #{orderId}
+    </update>
 </mapper>
 

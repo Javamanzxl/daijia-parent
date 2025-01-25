@@ -6,9 +6,11 @@ import com.atguigu.daijia.model.form.order.StartDriveForm;
 import com.atguigu.daijia.model.form.order.UpdateOrderBillForm;
 import com.atguigu.daijia.model.form.order.UpdateOrderCartForm;
 import com.atguigu.daijia.model.vo.base.PageVo;
-import com.atguigu.daijia.model.vo.order.CurrentOrderInfoVo;
+import com.atguigu.daijia.model.vo.order.*;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.IService;
+
+import java.math.BigDecimal;
 
 public interface OrderInfoService extends IService<OrderInfo> {
 
@@ -35,4 +37,20 @@ public interface OrderInfoService extends IService<OrderInfo> {
     PageVo<OrderInfo> findCustomerOrderPage(Page<OrderInfo> pageParam, Long customerId);
 
     PageVo findDriverOrderPage(Page<OrderInfo> pageParam, Long driverId);
+
+    OrderBillVo getOrderBillInfo(Long orderId);
+
+    OrderProfitsharingVo getOrderProfitsharing(Long orderId);
+
+    Boolean sendOrderBillInfo(Long orderId, Long driverId);
+
+    OrderPayVo getOrderPayVo(String orderNo, Long customerId);
+
+    Boolean updateOrderPayStatus(String orderNo);
+
+    OrderRewardVo getOrderRewardFee(String orderNo);
+
+    void orderCancel(long orderId);
+
+    Boolean updateCouponAmount(Long orderId, BigDecimal couponAmount);
 }

@@ -49,7 +49,7 @@ public enum ResultCodeEnum {
     COUPON_USER_LIMIT( 250, "超出领取数量"),
     WX_CODE_ERROR(217, "获取微信openid失败"),
     FACE_FAIL(217, "司机人脸验证失败"),
-    FILE_ERROR(217, "minio上传失败");
+    FILE_ERROR(217, "minio上传失败"), COUPON_FAIL(250, "优惠卷没有抢到");
 
     private Integer code;
 

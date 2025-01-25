@@ -100,4 +100,19 @@ public class CustomerInfoServiceImpl extends ServiceImpl<CustomerInfoMapper, Cus
             throw new RuntimeException(e);
         }
     }
+
+    /**
+     * 获取客户OpenId
+     * @param customerId
+     * @return
+     */
+    @Override
+    public String getCustomerOpenId(Long customerId) {
+        CustomerInfo customerInfo = customerInfoMapper.selectOne(new LambdaQueryWrapper<CustomerInfo>()
+                .eq(CustomerInfo::getId, customerId));
+        if(customerInfo!=null){
+            return customerInfo.getWxOpenId();
+        }
+        return null;
+    }
 }

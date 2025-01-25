@@ -38,4 +38,7 @@ public interface DriverInfoFeignClient {
     Result<Boolean> updateServiceStatus(@PathVariable(value = "driverId") Long driverId, @PathVariable(value = "status") Integer status);
     @GetMapping("/driver/info/getDriverInfo/{driverId}")
     Result<DriverInfoVo> getDriverInfo(@PathVariable Long driverId);
+    @GetMapping("/driver/info/getDriverOpenId/{driverId}")
+    Result<String> getDriverOpenId(@PathVariable("driverId") Long driverId);
+
 }

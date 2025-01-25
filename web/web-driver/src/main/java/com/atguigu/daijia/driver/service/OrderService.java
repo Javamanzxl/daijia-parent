@@ -36,4 +36,6 @@ public interface OrderService {
     OrderServiceLastLocationVo getOrderServiceLastLocation(Long orderId);
 
     Boolean endDrive(OrderFeeForm orderFeeForm);
+
+    Boolean sendOrderBillInfo(Long orderId, Long driverId);
 }

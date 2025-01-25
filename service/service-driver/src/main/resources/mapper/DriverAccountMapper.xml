@@ -11,6 +11,13 @@
 	<sql id="columns">
 		id,user_id,total_amount,lock_amount,available_amount,total_income_amount,total_pay_amount,create_time,update_time,is_deleted
 	</sql>
+    <insert id="add">
+		update daijia_driver.driver_account
+		set total_amount=total_amount+#{amount}
+		  ,available_amount=available_amount+#{amount}
+		  ,total_income_amount = total_income_amount + #{amount}
+		where driver_id=#{driverId}
+	</insert>
 
 </mapper>
 

@@ -3,16 +3,23 @@ package com.atguigu.daijia.customer.service.impl;
 import com.atguigu.daijia.common.execption.GlobalException;
 import com.atguigu.daijia.common.result.Result;
 import com.atguigu.daijia.common.result.ResultCodeEnum;
+import com.atguigu.daijia.coupon.client.CouponFeignClient;
+import com.atguigu.daijia.customer.client.CustomerInfoFeignClient;
 import com.atguigu.daijia.customer.service.OrderService;
 import com.atguigu.daijia.dispatch.client.NewOrderFeignClient;
 import com.atguigu.daijia.driver.client.DriverInfoFeignClient;
 import com.atguigu.daijia.map.client.LocationFeignClient;
 import com.atguigu.daijia.map.client.MapFeignClient;
+import com.atguigu.daijia.map.client.WxPayFeignClient;
 import com.atguigu.daijia.model.entity.order.OrderInfo;
+import com.atguigu.daijia.model.enums.OrderStatus;
+import com.atguigu.daijia.model.form.coupon.UseCouponForm;
 import com.atguigu.daijia.model.form.customer.ExpectOrderForm;
 import com.atguigu.daijia.model.form.customer.SubmitOrderForm;
 import com.atguigu.daijia.model.form.map.CalculateDrivingLineForm;
 import com.atguigu.daijia.model.form.order.OrderInfoForm;
+import com.atguigu.daijia.model.form.payment.CreateWxPaymentForm;
+import com.atguigu.daijia.model.form.payment.PaymentInfoForm;
 import com.atguigu.daijia.model.form.rules.FeeRuleRequestForm;
 import com.atguigu.daijia.model.vo.base.PageVo;
 import com.atguigu.daijia.model.vo.customer.ExpectOrderVo;
@@ -21,7 +28,10 @@ import com.atguigu.daijia.model.vo.driver.DriverInfoVo;
 import com.atguigu.daijia.model.vo.map.DrivingLineVo;
 import com.atguigu.daijia.model.vo.map.OrderLocationVo;
 import com.atguigu.daijia.model.vo.order.CurrentOrderInfoVo;
+import com.atguigu.daijia.model.vo.order.OrderBillVo;
 import com.atguigu.daijia.model.vo.order.OrderInfoVo;
+import com.atguigu.daijia.model.vo.order.OrderPayVo;
+import com.atguigu.daijia.model.vo.payment.WxPrepayVo;
 import com.atguigu.daijia.model.vo.rules.FeeRuleResponseVo;
 import com.atguigu.daijia.order.client.OrderInfoFeignClient;
 import com.atguigu.daijia.rules.client.FeeRuleFeignClient;
@@ -30,6 +40,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
 
+import java.math.BigDecimal;
 import java.util.Date;
 
 @Slf4j
@@ -47,6 +58,13 @@ public class OrderServiceImpl implements OrderService {
     private DriverInfoFeignClient driverInfoFeignClient;
     @Resource
     private LocationFeignClient locationFeignClient;
+
+    @Resource
+    private CustomerInfoFeignClient customerInfoFeignClient;
+    @Resource
+    private WxPayFeignClient wxPayFeignClient;
+    @Resource
+    private CouponFeignClient couponFeignClient;
 
     /**
      * 预估订单数据
@@ -160,14 +178,30 @@ public class OrderServiceImpl implements OrderService {
      */
     @Override
     public OrderInfoVo getOrderInfo(Long orderId, Long customerId) {
+        //订单信息
         OrderInfo orderInfo = orderInfoFeignClient.getOrderInfo(orderId).getData();
-        if (orderInfo.getCustomerId().longValue() != customerId) {
+        if (orderInfo.getCustomerId().longValue() != customerId.longValue()) {
             throw new GlobalException(ResultCodeEnum.ILLEGAL_REQUEST);
         }
+
+        //获取司机信息
+        DriverInfoVo driverInfoVo = null;
+        if (null != orderInfo.getDriverId()) {
+            driverInfoVo = driverInfoFeignClient.getDriverInfo(orderInfo.getDriverId()).getData();
+        }
+
+        //账单信息
+        OrderBillVo orderBillVo = null;
+        if (orderInfo.getStatus() >= OrderStatus.UNPAID.getStatus()) {
+            orderBillVo = orderInfoFeignClient.getOrderBillInfo(orderId).getData();
+        }
+
         //封装订单信息
         OrderInfoVo orderInfoVo = new OrderInfoVo();
         orderInfoVo.setOrderId(orderId);
         BeanUtils.copyProperties(orderInfo, orderInfoVo);
+        orderInfoVo.setOrderBillVo(orderBillVo);
+        orderInfoVo.setDriverInfoVo(driverInfoVo);
         return orderInfoVo;
     }
 
@@ -189,6 +223,7 @@ public class OrderServiceImpl implements OrderService {
 
     /**
      * 司机赶往代驾起始点：获取订单经纬度位置
+     *
      * @param orderId
      * @return
      */
@@ -199,6 +234,7 @@ public class OrderServiceImpl implements OrderService {
 
     /**
      * 计算最佳驾驶线路
+     *
      * @param calculateDrivingLineForm
      * @return
      */
@@ -209,6 +245,7 @@ public class OrderServiceImpl implements OrderService {
 
     /**
      * 获取乘客订单分页列表
+     *
      * @param customerId
      * @param page
      * @param limit
@@ -221,6 +258,7 @@ public class OrderServiceImpl implements OrderService {
 
     /**
      * 获取司机订单分页列表
+     *
      * @param driverId
      * @param page
      * @param limit
@@ -229,5 +267,62 @@ public class OrderServiceImpl implements OrderService {
     @Override
     public PageVo findDriverOrderPage(Long driverId, Long page, Long limit) {
         return orderInfoFeignClient.findDriverOrderPage(driverId, page, limit).getData();
+    }
+
+    /**
+     * 创建微信支付
+     *
+     * @param createWxPaymentForm
+     * @return
+     */
+    @Override
+    public WxPrepayVo createWxPayment(CreateWxPaymentForm createWxPaymentForm) {
+        //获取订单支付信息
+        OrderPayVo orderPayVo = orderInfoFeignClient.getOrderPayVo(createWxPaymentForm.getOrderNo(), createWxPaymentForm.getCustomerId()).getData();
+        //判断是否支付
+        if (orderPayVo.getStatus() != OrderStatus.UNPAID.getStatus()) {
+            throw new GlobalException(ResultCodeEnum.ILLEGAL_REQUEST);
+        }
+        //获取乘客和司机openid
+        String driverOpenId = driverInfoFeignClient.getDriverOpenId(orderPayVo.getDriverId()).getData();
+        String customerOpenId = customerInfoFeignClient.getCustomerOpenId(orderPayVo.getCustomerId()).getData();
+        //处理优惠卷
+        BigDecimal couponAmount = null;
+        //判断，支付时选择过一次优惠券，如果支付失败或未支付，下次支付时不能再次选择，只能使用第一次选中的优惠券（前端已控制，后端再次校验）
+        if (null == orderPayVo.getCouponAmount() && null != createWxPaymentForm.getCustomerCouponId() && createWxPaymentForm.getCustomerCouponId() != 0) {
+            UseCouponForm useCouponForm = new UseCouponForm();
+            useCouponForm.setOrderId(orderPayVo.getOrderId());
+            useCouponForm.setCustomerCouponId(createWxPaymentForm.getCustomerCouponId());
+            useCouponForm.setOrderAmount(orderPayVo.getPayAmount());
+            useCouponForm.setCustomerId(createWxPaymentForm.getCustomerId());
+            couponAmount = couponFeignClient.useCoupon(useCouponForm).getData();
+        }
+        //更新订单支付金额
+        BigDecimal payAmount = orderPayVo.getPayAmount();
+        if(couponAmount!=null){
+            orderInfoFeignClient.updateCouponAmount(orderPayVo.getOrderId(), couponAmount);
+            //当前金额
+            payAmount = payAmount.subtract(couponAmount);
+        }
+        //封装数据，发起支付
+        PaymentInfoForm paymentInfoForm = new PaymentInfoForm();
+        paymentInfoForm.setCustomerOpenId(customerOpenId);
+        paymentInfoForm.setDriverOpenId(driverOpenId);
+        paymentInfoForm.setOrderNo(orderPayVo.getOrderNo());
+        paymentInfoForm.setAmount(payAmount);
+        paymentInfoForm.setContent(orderPayVo.getContent());
+        paymentInfoForm.setPayWay(1);
+
+        return wxPayFeignClient.createWxPayment(paymentInfoForm).getData();
+    }
+
+    /**
+     * 支付状态查询
+     * @param orderNo
+     * @return
+     */
+    @Override
+    public Boolean queryPayStatus(String orderNo) {
+        return wxPayFeignClient.queryPayStatus(orderNo).getData();
     }
 }

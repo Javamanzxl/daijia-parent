@@ -22,9 +22,7 @@ import com.atguigu.daijia.model.form.rules.RewardRuleRequestForm;
 import com.atguigu.daijia.model.vo.map.DrivingLineVo;
 import com.atguigu.daijia.model.vo.map.OrderLocationVo;
 import com.atguigu.daijia.model.vo.map.OrderServiceLastLocationVo;
-import com.atguigu.daijia.model.vo.order.CurrentOrderInfoVo;
-import com.atguigu.daijia.model.vo.order.NewOrderDataVo;
-import com.atguigu.daijia.model.vo.order.OrderInfoVo;
+import com.atguigu.daijia.model.vo.order.*;
 import com.atguigu.daijia.model.vo.rules.FeeRuleResponseVo;
 import com.atguigu.daijia.model.vo.rules.ProfitsharingRuleResponseVo;
 import com.atguigu.daijia.model.vo.rules.RewardRuleResponseVo;
@@ -120,16 +118,37 @@ public class OrderServiceImpl implements OrderService {
      * @return
      */
     @Override
+    @SneakyThrows
     public OrderInfoVo getOrderInfo(Long orderId, Long driverId) {
         //订单信息
-        OrderInfo orderInfo = orderInfoFeignClient.getOrderInfo(orderId).getData();
-        if(orderInfo.getDriverId().longValue() != driverId.longValue()) {
-            throw new GlobalException(ResultCodeEnum.ILLEGAL_REQUEST);
-        }
+        CompletableFuture<OrderInfo> orderInfoCompletableFuture = CompletableFuture.supplyAsync(() -> {
+            OrderInfo orderInfo = orderInfoFeignClient.getOrderInfo(orderId).getData();
+            if (orderInfo.getDriverId().longValue() != driverId.longValue()) {
+                throw new GlobalException(ResultCodeEnum.ILLEGAL_REQUEST);
+            }
+            return orderInfo;
+        }, threadPoolExecutor);
+
+        //订单详细信息
+        CompletableFuture<OrderBillVo> orderBillVoCompletableFuture = CompletableFuture.supplyAsync(() -> {
+            return orderInfoFeignClient.getOrderBillInfo(orderId).getData();
+        }, threadPoolExecutor);
+
+        //订单分账信息
+        CompletableFuture<OrderProfitsharingVo> orderProfitsharingVoCompletableFuture = CompletableFuture.supplyAsync(() -> {
+            return orderInfoFeignClient.getOrderProfitsharing(orderId).getData();
+        }, threadPoolExecutor);
+        CompletableFuture.allOf(orderInfoCompletableFuture,orderBillVoCompletableFuture,orderProfitsharingVoCompletableFuture)
+                .join();
+        OrderInfo orderInfo = orderInfoCompletableFuture.get();
+        OrderBillVo orderBillVo = orderBillVoCompletableFuture.get();
+        OrderProfitsharingVo orderProfitsharingVo = orderProfitsharingVoCompletableFuture.get();
         //封装订单信息
         OrderInfoVo orderInfoVo = new OrderInfoVo();
         orderInfoVo.setOrderId(orderId);
         BeanUtils.copyProperties(orderInfo, orderInfoVo);
+        orderInfoVo.setOrderBillVo(orderBillVo);
+        orderInfoVo.setOrderProfitsharingVo(orderProfitsharingVo);
         return orderInfoVo;
     }
 
@@ -212,7 +231,9 @@ public class OrderServiceImpl implements OrderService {
             return orderInfo;
         }, threadPoolExecutor);
         //防止刷单
-        CompletableFuture<OrderServiceLastLocationVo> orderServiceLastLocationVoCompletableFuture = CompletableFuture.supplyAsync(() -> locationFeignClient.getOrderServiceLastLocation(orderFeeForm.getOrderId()).getData(), threadPoolExecutor);
+        CompletableFuture<OrderServiceLastLocationVo> orderServiceLastLocationVoCompletableFuture
+                = CompletableFuture.supplyAsync
+                (() -> locationFeignClient.getOrderServiceLastLocation(orderFeeForm.getOrderId()).getData(), threadPoolExecutor);
         CompletableFuture.allOf(orderInfoCompletableFuture,orderServiceLastLocationVoCompletableFuture).join();
         //获取俩个线程的执行结果
         OrderInfo orderInfo = orderInfoCompletableFuture.get();
@@ -304,5 +325,17 @@ public class OrderServiceImpl implements OrderService {
         //7.结束代驾更新账单
         orderInfoFeignClient.endDrive(updateOrderBillForm);
         return true;
+    }
+
+    /**
+     * 司机发送账单信息
+     * @param orderId
+     * @param driverId
+     * @return
+     */
+    @Override
+    public Boolean sendOrderBillInfo(Long orderId, Long driverId) {
+
+        return orderInfoFeignClient.sendOrderBillInfo(orderId, driverId).getData();
     }
 }
